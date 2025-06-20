@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Session</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .question-box { border: 1px solid #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .option { margin: 5px 0; }
+    .timer { font-weight: bold; color: red; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Quiz</h1>
+  <div id="question-container" class="question-box hidden">
+  <p id="question-text"></p>
+  <div id="options"></div>
+  <p class="timer">Time left: <span id="countdown">60</span> seconds</p>
+  <button id="submit-btn" onclick="submitAnswer()">Submit</button>
+  <p id="waiting-text" class="hidden">Waiting for others to answer...</p>
+  <button onclick="finishQuiz()">Finish Quiz</button>
+</div>
+
+
+  <div id="waiting" class="hidden">
+    <p>Waiting for other participants to finish...</p>
+  </div>
+
+  <div id="rating" class="hidden">
+    <h2>Final Results</h2>
+    <ul id="rating-list"></ul>
+    <button id="to-dashboard-btn" class="hidden" onclick="location.href='/dashboard'">Go to Dashboard</button>
+  </div>
+
+  <script>
+    const sessionId = window.location.pathname.split('/').pop();
+    const socket = new WebSocket(`ws://${location.host}/ws/session/${sessionId}`);
+    let currentQuestion = null;
+    let countdownInterval = null;
+    let selectedAnswers = [];
+
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === 'question') {
+        showQuestion(msg.question);
+      } else if (msg.type === 'rating') {
+        showRating(msg.rating);
+      } else if (msg.type === 'kick' || msg.type === 'close') {
+        alert('You were removed or session closed.');
+        location.href = '/dashboard';
+      }
+    };
+
+    function showQuestion(question) {
+      clearInterval(countdownInterval);
+
+      currentQuestion = question;
+      selectedAnswers = [];
+      document.getElementById('question-container').classList.remove('hidden');
+      document.getElementById('waiting').classList.add('hidden');
+      document.getElementById('rating').classList.add('hidden');
+
+      document.getElementById('submit-btn').classList.remove('hidden');
+      document.getElementById('waiting-text').classList.add('hidden');
+
+      document.getElementById('question-text').innerText = question.text;
+      const optionsDiv = document.getElementById('options');
+      optionsDiv.innerHTML = '';
+
+      const inputType = question.type === 'multiple_choice' ? 'checkbox' : 'radio';
+
+      question.options.forEach((opt, idx) => {
+        const el = document.createElement('div');
+        el.className = 'option';
+        el.innerHTML = `
+          <label>
+            <input type="${inputType}" name="answer" value="${idx}" onchange="handleOption(this, ${idx})"> ${opt}
+          </label>`;
+        optionsDiv.appendChild(el);
+      });
+
+      let timeLeft = 60;
+      document.getElementById('countdown').innerText = timeLeft;
+      countdownInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('countdown').innerText = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(countdownInterval);
+          submitAnswer();
+        }
+      }, 1000);
+    }
+
+    function handleOption(el, index) {
+      if (currentQuestion.type === 'multiple_choice') {
+        if (el.checked) {
+          if (!selectedAnswers.includes(index)) selectedAnswers.push(index);
+        } else {
+          selectedAnswers = selectedAnswers.filter(i => i !== index);
+        }
+      } else {
+        selectedAnswers = [index];
+      }
+    }
+
+    function finishQuiz() {
+      fetch(`/session/${sessionId}/finish`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to finish quiz');
+        return res.json();
+      })
+      .then(data => {
+        console.log('Quiz finished:', data);
+        document.getElementById('question-container').classList.add('hidden');
+        document.getElementById('waiting').classList.remove('hidden');
+      })
+      .catch(err => {
+        console.error('Finish quiz error:', err);
+      });
+    }
+
+    function submitAnswer() {
+      document.getElementById('submit-btn').classList.add('hidden');
+      document.getElementById('waiting-text').classList.remove('hidden');
+
+      fetch(`/question/${currentQuestion._id}/check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          session_id: sessionId,
+          answers: selectedAnswers
+        })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Network response was not ok');
+        return res.json();
+      })
+      .then(data => {
+        console.log('Answer submitted:', data);
+      })
+      .catch(err => {
+        console.error('Submit answer error:', err);
+      });
+    }
+
+    function showRating(rating) {
+      document.getElementById('waiting').classList.add('hidden');
+      document.getElementById('question-container').classList.add('hidden');
+
+      document.getElementById('rating').classList.remove('hidden');
+      const ul = document.getElementById('rating-list');
+      ul.innerHTML = '';
+      rating.sort((a, b) => b.score - a.score);
+      rating.forEach(entry => {
+        const li = document.createElement('li');
+        li.textContent = `${entry.login}: ${entry.score} correct`;
+        ul.appendChild(li);
+      });
+
+      document.getElementById('to-dashboard-btn').classList.remove('hidden');
+    }
+
+  </script>
+</body>
+</html>

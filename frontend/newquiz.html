@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Создание квиза</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      position: relative;
+    }
+    .logout-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #f0f0f0;
+      color: #333;
+      border: none;
+      font-size: 20px;
+      line-height: 1;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 50%;
+      text-decoration: none;
+      text-align: center;
+    }
+    .question-block {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      position: relative;
+    }
+    .remove-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: red;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+    }
+    .option-row {
+      display: flex;
+      align-items: center;
+      margin-top: 5px;
+    }
+    .option-row input[type="text"] {
+      flex: 1;
+      margin-right: 10px;
+    }
+    .option-row input[type="checkbox"],
+    .option-row input[type="radio"] {
+      margin-right: 5px;
+    }
+    .add-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .submit-btn {
+      margin-top: 30px;
+      padding: 12px 25px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .submit-btn:disabled {
+      background: gray;
+      cursor: default;
+    }
+    #error, #success {
+      text-align: center;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    #error {
+      color: red;
+    }
+    #success {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+
+<a href="/dashboard" class="logout-btn" title="Назад">×</a>
+
+<h2>Создание квиза</h2>
+
+<form id="quizForm">
+  <label>Название квиза:</label>
+  <input type="text" id="title" required><br><br>
+
+  <label>Описание:</label>
+  <textarea id="description" required style="width:100%; height:80px;"></textarea><br><br>
+
+  <div id="questionsContainer"></div>
+
+  <button type="button" class="add-btn" onclick="addQuestionBlock()">+ Добавить вопрос</button>
+  <br>
+  <button type="submit" class="submit-btn" id="createBtn">Создать квиз</button>
+
+  <div id="error"></div>
+  <div id="success"></div>
+</form>
+
+<script>
+const userId = localStorage.getItem("userID");
+
+function createOptionInput(type, groupName = "") {
+  const div = document.createElement("div");
+  div.className = "option-row";
+
+  const answerInput = document.createElement("input");
+  answerInput.type = "text";
+  answerInput.className = "option-input";
+
+  const correctInput = document.createElement("input");
+  correctInput.className = "correct-answer";
+  correctInput.type = type === "single" ? "radio" : "checkbox";
+  if (type === "single") correctInput.name = groupName;
+
+  div.appendChild(correctInput);
+  div.appendChild(answerInput);
+
+  answerInput.addEventListener("input", function () {
+    const container = div.parentElement;
+    const optionInputs = container.querySelectorAll(".option-input");
+    const last = optionInputs[optionInputs.length - 1];
+    if (last.value.trim() !== "") {
+      container.appendChild(createOptionInput(type, groupName));
+    }
+    optionInputs.forEach((input, idx) => {
+      if (input !== last && input.value.trim() === "" && idx !== optionInputs.length - 2) {
+        input.parentElement.remove();
+      }
+    });
+  });
+
+  return div;
+}
+
+function addQuestionBlock() {
+  const container = document.getElementById("questionsContainer");
+  const block = document.createElement("div");
+  block.className = "question-block";
+
+  const questionIndex = document.querySelectorAll(".question-block").length;
+
+  const removeBtn = document.createElement("button");
+  removeBtn.textContent = "×";
+  removeBtn.className = "remove-btn";
+  removeBtn.type = "button";
+  removeBtn.onclick = () => block.remove();
+  block.appendChild(removeBtn);
+
+  const labelText = document.createElement("label");
+  labelText.textContent = "Текст вопроса:";
+  const inputText = document.createElement("input");
+  inputText.type = "text";
+  inputText.name = "questionText";
+  inputText.required = true;
+
+  block.appendChild(labelText);
+  block.appendChild(document.createElement("br"));
+  block.appendChild(inputText);
+  block.appendChild(document.createElement("br"));
+  block.appendChild(document.createElement("br"));
+
+  const labelType = document.createElement("label");
+  labelType.textContent = "Тип вопроса:";
+  const selectType = document.createElement("select");
+  selectType.name = "questionType";
+  selectType.innerHTML = `
+    <option value="single_choice">Один вариант</option>
+    <option value="multiple_choice">Несколько вариантов</option>
+    <option value="true_false">Правда / Ложь</option>
+  `;
+  selectType.onchange = function () {
+    updateOptions(this);
+  };
+
+  block.appendChild(labelType);
+  block.appendChild(document.createElement("br"));
+  block.appendChild(selectType);
+  block.appendChild(document.createElement("br"));
+  block.appendChild(document.createElement("br"));
+
+  const optionsDiv = document.createElement("div");
+  optionsDiv.className = "options";
+  block.appendChild(optionsDiv);
+
+  container.appendChild(block);
+  updateOptions(selectType);
+}
+
+function updateOptions(select) {
+  const block = select.closest(".question-block");
+  const optionsDiv = block.querySelector(".options");
+  optionsDiv.innerHTML = "";
+
+  const type = select.value;
+  const groupName = "correct" + Math.random();
+
+  if (type === "true_false") {
+    const trueDiv = document.createElement("div");
+    trueDiv.className = "option-row";
+    const trueInputRadio = document.createElement("input");
+    trueInputRadio.type = "radio";
+    trueInputRadio.className = "correct-answer";
+    trueInputRadio.name = groupName;
+    const trueInputText = document.createElement("input");
+    trueInputText.type = "text";
+    trueInputText.className = "option-input";
+    trueInputText.value = "Правда";
+    trueInputText.disabled = true;
+    trueDiv.appendChild(trueInputRadio);
+    trueDiv.appendChild(trueInputText);
+
+    const falseDiv = document.createElement("div");
+    falseDiv.className = "option-row";
+    const falseInputRadio = document.createElement("input");
+    falseInputRadio.type = "radio";
+    falseInputRadio.className = "correct-answer";
+    falseInputRadio.name = groupName;
+    const falseInputText = document.createElement("input");
+    falseInputText.type = "text";
+    falseInputText.className = "option-input";
+    falseInputText.value = "Ложь";
+    falseInputText.disabled = true;
+    falseDiv.appendChild(falseInputRadio);
+    falseDiv.appendChild(falseInputText);
+
+    optionsDiv.appendChild(trueDiv);
+    optionsDiv.appendChild(falseDiv);
+  } else {
+    const mode = type === "single_choice" ? "single" : "multiple";
+    optionsDiv.appendChild(createOptionInput(mode, groupName));
+  }
+}
+
+function showForm() {
+  document.getElementById("quizForm").style.display = "block";
+}
+
+document.getElementById("quizForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+
+  const title = document.getElementById("title").value.trim();
+  const description = document.getElementById("description").value.trim();
+  const questionBlocks = document.querySelectorAll(".question-block");
+
+  const errorDiv = document.getElementById("error");
+  const successDiv = document.getElementById("success");
+  const createBtn = document.getElementById("createBtn");
+  errorDiv.textContent = "";
+  successDiv.textContent = "";
+  showForm();
+
+  if (!title || !description) {
+    errorDiv.textContent = "Введите название и описание квиза.";
+    return;
+  }
+
+  if (questionBlocks.length === 0) {
+    errorDiv.textContent = "Добавьте хотя бы один вопрос.";
+    return;
+  }
+
+  const questions = [];
+
+  for (const block of questionBlocks) {
+    const text = block.querySelector("input[name='questionText']").value.trim();
+    const type = block.querySelector("select[name='questionType']").value;
+    const optionsInputs = block.querySelectorAll(".option-input");
+    const correctInputs = block.querySelectorAll(".correct-answer");
+
+    if (!text) {
+      errorDiv.textContent = "У одного из вопросов не указан текст.";
+      return;
+    }
+
+    const options = [];
+    const correctAnswer = [];
+
+    optionsInputs.forEach((opt, index) => {
+      const val = opt.value.trim();
+      if (val) {
+        options.push(val);
+        const input = correctInputs[index];
+        if (
+          (type === "single_choice" && input.checked) ||
+          (type === "multiple_choice" && input.checked) ||
+          (type === "true_false" && input.checked)
+        ) {
+          correctAnswer.push(index);
+        }
+      }
+    });
+
+    if (type !== "true_false" && options.length < 2) {
+      errorDiv.textContent = "Каждый вопрос должен содержать минимум два варианта ответа.";
+      return;
+    }
+
+    if (correctAnswer.length === 0) {
+      errorDiv.textContent = "Укажите правильный ответ для каждого вопроса.";
+      return;
+    }
+
+    if (type === "single_choice" && correctAnswer.length > 1) {
+      errorDiv.textContent = "Для вопросов с одним вариантом выберите только один правильный ответ.";
+      return;
+    }
+
+    questions.push({
+      text,
+      type,
+      options: type === "true_false" ? ["Правда", "Ложь"] : options,
+      correctAnswer
+    });
+  }
+
+  const quiz = {
+    userId,
+    title,
+    description,
+    questions
+  };
+
+  try {
+    const response = await fetch("http://localhost:8080/api/newquiz", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(quiz)
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      errorDiv.textContent = result.error || "Ошибка при создании квиза.";
+    } else {
+      successDiv.innerHTML = `
+      <div>Квиз успешно создан!</div>
+      <div style="margin-top: 20px;">
+        <button onclick="location.href='/dashboard'" style="padding:10px 20px; margin-right:10px;">Другие квизы</button>
+        <button onclick="location.href='/quiz/${result._id}'" style="padding:10px 20px;">Перейти к квизу</button>
+      </div>
+      `;
+      createBtn.disabled = true;
+    }
+  } catch (err) {
+    errorDiv.textContent = "Сервер недоступен.";
+  }
+});
+
+addQuestionBlock();
+addQuestionBlock();
+addQuestionBlock();
+</script>
+
+</body>
+</html>

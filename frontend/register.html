@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Регистрация</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 400px;
+      margin: 50px auto;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 1em;
+    }
+    input {
+      width: 100%;
+      padding: 0.5em;
+      margin-top: 0.3em;
+    }
+    button {
+      margin-top: 1.5em;
+      width: 100%;
+      padding: 0.7em;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .error {
+      color: red;
+      margin-top: 1em;
+      text-align: center;
+    }
+    .success {
+      color: green;
+      margin-top: 1em;
+      text-align: center;
+    }
+    .switch-link {
+      display: block;
+      width: 100%;
+      text-align: center;
+      margin-top: 15px;
+      color: #0077cc;
+      cursor: pointer;
+      text-decoration: underline;
+      white-space: normal;
+      box-sizing: border-box;
+    }
+    form input,
+    form button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    }
+    form button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    }
+    form button:hover {
+    background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+
+    <h2>Sign In</h2>
+
+    <form id="registerForm">
+        <label for="login">Login:</label>
+        <input type="text" id="login" name="login" required>
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+
+        <label for="passwordConfirm">Repeat password:</label>
+        <input type="password" id="passwordConfirm" name="passwordConfirm" required>
+
+        <button type="submit">Sign in</button>
+
+        <div class="error" id="error"></div>
+        <div class="success" id="success"></div>
+    </form>
+
+    <a href="/login" class="switch-link">Already have an account? Log in</a>
+
+  <script>
+  const form = document.getElementById("registerForm");
+  const errorDiv = document.getElementById("error");
+  const successDiv = document.getElementById("success");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorDiv.textContent = '';
+    successDiv.textContent = '';
+
+    const login = form.login.value.trim();
+    const email = form.email.value.trim();
+    const password = form.password.value;
+    const passwordConfirm = form.passwordConfirm.value;
+
+    if (password !== passwordConfirm) {
+      errorDiv.textContent = "Пароли не совпадают!";
+      return;
+    }
+
+    const body = {
+      login,
+      email,
+      password,
+      passwordConfirm
+    };
+
+    try {
+      const res = await fetch("http://localhost:8080/api/registration", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        credentials: "include"
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorDiv.textContent = data.error || "Произошла ошибка";
+      } else {
+        successDiv.textContent = `Добро пожаловать, ${data.login || login}!`;
+
+        localStorage.setItem("userID", data._id || data.id);
+
+        window.location.href = "/dashboard";
+      }
+    } catch (err) {
+      errorDiv.textContent = "Сервер недоступен";
+    }
+  });
+</script>
+
+
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Квиз</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      max-width: 800px;
+      margin: auto;
+      position: relative;
+    }
+    h1 {
+      text-align: center;
+    }
+    .description {
+      margin-bottom: 2rem;
+      font-style: italic;
+    }
+    .question {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+    .question h3 {
+      margin-bottom: 0.5rem;
+    }
+    .options {
+      margin-left: 1rem;
+    }
+    .button-container {
+      text-align: center;
+      margin-top: 2rem;
+    }
+    .button-container button {
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .logout-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #f0f0f0;
+      color: #333;
+      border: none;
+      font-size: 20px;
+      line-height: 1;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 50%;
+      text-decoration: none;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <a href="/dashboard" class="logout-btn" title="Назад">×</a>
+
+  <h1 id="quizTitle">Загрузка...</h1>
+  <p id="quizDescription" class="description"></p>
+
+  <div id="questionsContainer"></div>
+
+  <div class="button-container">
+    <button id="startButton">Начать квиз</button>
+  </div>
+
+  <script>
+    const quizId = window.location.pathname.split("/").pop();
+
+    async function loadQuiz() {
+      const response = await fetch(`http://localhost:8080/api/quiz/${quizId}`);
+      if (!response.ok) {
+        document.body.innerHTML = "<h2>Ошибка загрузки квиза.</h2>";
+        return;
+      }
+
+      const quiz = await response.json();
+
+      document.getElementById("quizTitle").textContent = quiz.title;
+      document.getElementById("quizDescription").textContent = quiz.description;
+
+      const container = document.getElementById("questionsContainer");
+      quiz.questions.forEach((q, index) => {
+        const questionDiv = document.createElement("div");
+        questionDiv.className = "question";
+
+        const title = document.createElement("h3");
+        title.textContent = `${index + 1}. ${q.text}`;
+        questionDiv.appendChild(title);
+
+        const options = document.createElement("ul");
+        options.className = "options";
+        q.options.forEach((opt, i) => {
+          const li = document.createElement("li");
+          li.textContent = opt;
+          options.appendChild(li);
+        });
+
+        questionDiv.appendChild(options);
+        container.appendChild(questionDiv);
+      });
+    }
+
+    document.getElementById("startButton").onclick = async function () {
+      const userID = localStorage.getItem("userID");
+      if (!userID) {
+        alert("Вы не авторизованы");
+        return;
+      }
+
+      const response = await fetch(`http://localhost:8080/api/newsession/${quizId}`, {
+        method: "POST"
+      });
+
+      if (!response.ok) {
+        alert("Не удалось создать сессию");
+        return;
+      }
+
+      const result = await response.json();
+      const sessionId = result.session_id;
+
+      window.location.href = `/startquiz/${sessionId}`;
+    };
+
+
+
+    loadQuiz();
+  </script>
+</body>
+</html>

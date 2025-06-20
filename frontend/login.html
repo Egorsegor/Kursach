@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 400px;
+      margin: 50px auto;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 {
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    button {
+      margin-top: 1.5em;
+      width: 100%;
+      padding: 0.7em;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .error {
+      color: red;
+      margin-top: 10px;
+    }
+    .success {
+      color: green;
+      margin-top: 10px;
+    }
+    .switch-link {
+      display: block;
+      width: 100%;
+      text-align: center;
+      margin-top: 15px;
+      color: #0077cc;
+      cursor: pointer;
+      text-decoration: underline;
+      white-space: normal;
+      box-sizing: border-box;
+    }
+    form input,
+    form button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    }
+    form button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    }
+    form button:hover {
+    background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Log In</h2>
+
+  <form id="loginForm">
+    <label for="identifier">Email or Login:</label>
+    <input type="text" id="identifier" name="identifier" required />
+
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" required />
+
+    <button type="submit">Log In</button>
+
+    <div id="error" class="error"></div>
+    <div id="success" class="success"></div>
+  </form>
+
+  <a href="/registration" class="switch-link">Don't have an account? Sign In.</a>
+
+  <script>
+  const form = document.getElementById("loginForm");
+  const errorDiv = document.getElementById("error");
+  const successDiv = document.getElementById("success");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorDiv.textContent = "";
+    successDiv.textContent = "";
+
+    const identifier = document.getElementById("identifier").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      const res = await fetch("http://localhost:8080/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ identifier, password }),
+        credentials: "include"
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorDiv.textContent = data.error || "Login failed";
+      } else {
+        successDiv.textContent = data.message;
+        localStorage.setItem("userID", data.user.id.toString());
+        window.location.href = "/dashboard";
+      }
+    } catch (err) {
+      errorDiv.textContent = "Server is unavailable";
+    }
+  });
+</script>
+
+
+</body>
+</html>

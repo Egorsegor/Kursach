@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Session</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .session-id {
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .participants {
+            margin-top: 20px;
+        }
+        .participant-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .participant {
+            background: #e3f2fd;
+            padding: 8px 12px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+        .remove-btn {
+            margin-left: 8px;
+            cursor: pointer;
+            color: #f44336;
+        }
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .start-btn {
+            background: #4caf50;
+            color: white;
+        }
+        .leave-btn {
+            background: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Quiz Session</h1>
+            <div>Session ID: <span class="session-id" id="sessionId"></span></div>
+        </div>
+
+        <div class="participants">
+            <h2>Participants: <span id="participantCount">1</span></h2>
+            <div class="participant-list" id="participantList"></div>
+        </div>
+
+        <div class="controls">
+            <button class="leave-btn" id="leaveBtn">Leave Session</button>
+            <button class="start-btn" id="startBtn">Start Quiz</button>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = window.location.pathname.split('/').pop();
+        let isCreator = false;
+        let userId = localStorage.getItem('userID');
+        let ws;
+        let isLeaving = true;
+
+        if (sessionStorage.getItem('justReloaded') === 'true') {
+            isLeaving = false;
+            sessionStorage.removeItem('justReloaded');
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
+                sessionStorage.setItem('justReloaded', 'true');
+            }
+        });
+
+        window.addEventListener('pagehide', () => {
+            if (isLeaving) {
+                navigator.sendBeacon('/api/session/' + sessionId + '/leave');
+            }
+        });
+
+        document.getElementById('leaveBtn').addEventListener('click', () => {
+            isLeaving = false;
+            leaveSession();
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('sessionId').textContent = sessionId;
+
+            fetch('/api/session/' + sessionId)
+                .then(res => res.json())
+                .then(session => {
+                    isCreator = session.creator_id === userId;
+                    if (!isCreator) {
+                        document.getElementById('startBtn').style.display = 'none';
+                    }
+                    updateParticipants(session.participants);
+                })
+                .catch(console.error);
+
+            fetch('/api/session/' + sessionId + '/join', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include'
+            }).catch(console.error);
+
+            setupWebSocket();
+
+            document.getElementById('startBtn').addEventListener('click', startQuiz);
+        });
+
+        function setupWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            ws = new WebSocket(`${protocol}//${host}/ws/session/${sessionId}`);
+
+            ws.onopen = () => {
+                fetch('/api/session/' + sessionId)
+                    .then(res => res.json())
+                    .then(session => {
+                        updateParticipants(session.participants);
+                    })
+                    .catch(console.error);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'update') {
+                    updateParticipants(data.members);
+                } else if (data.type === 'start') {
+                    window.location.href = `/quiz/session/${sessionId}`;
+                } else if (data.type === 'close') {
+                    Swal.fire({
+                        title: 'Session Closed',
+                        text: 'The creator has ended the session',
+                        icon: 'info'
+                    }).then(() => {
+                        window.location.href = '/dashboard';
+                    });
+                } else if (data.type === 'kick') {
+                    Swal.fire({
+                        title: 'You were kicked!',
+                        text: 'The creator has kicked you from the session.',
+                        icon: 'info'
+                    }).then(() => {
+                        window.location.href = '/dashboard';
+                    });
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+            };
+        }
+
+        function updateParticipants(participants) {
+            const participantList = document.getElementById('participantList');
+            const participantCount = document.getElementById('participantCount');
+
+            participantList.innerHTML = '';
+            participantCount.textContent = participants.length;
+
+            participants.forEach(participant => {
+                const participantEl = document.createElement('div');
+                participantEl.className = 'participant';
+
+                if (typeof participant === 'string') {
+                    participantEl.textContent = participant;
+                } else {
+                    participantEl.textContent = participant.login || participant.userID;
+                }
+
+                if (isCreator && participant.userID && participant.userID !== userId) {
+                    const removeBtn = document.createElement('span');
+                    removeBtn.className = 'remove-btn';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.addEventListener('click', () => removeParticipant(participant.userID));
+                    participantEl.appendChild(removeBtn);
+                }
+
+                participantList.appendChild(participantEl);
+            });
+        }
+
+
+
+        function removeParticipant(participantId) {
+            fetch('/api/session/' + sessionId + '/kick', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({ userId: participantId })
+            }).catch(console.error);
+        }
+
+        function leaveSession() {
+            fetch('/api/session/' + sessionId + '/leave', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include'
+            })
+            .then(() => {
+                window.location.href = '/dashboard';
+            })
+            .catch(console.error);
+        }
+
+        function startQuiz() {
+            const participantCount = parseInt(document.getElementById('participantCount').textContent);
+
+            if (participantCount < 2) {
+                Swal.fire({
+                    title: 'Need more participants',
+                    text: 'At least 2 participants are required to start the quiz.',
+                    icon: 'warning'
+                });
+                return;
+            }
+
+            fetch('/api/session/' + sessionId + '/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'started') {
+                }
+            })
+            .catch(console.error);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
